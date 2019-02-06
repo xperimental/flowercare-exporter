@@ -13,7 +13,7 @@ const (
 	metricPrefix = "flowercare_"
 
 	// Conversion factor from µS/cm to S/m
-	factorConductivity = 0.1
+	factorConductivity = 0.0001
 )
 
 type flowercareCollector struct {
