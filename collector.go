@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/barnybug/miflora"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,27 +17,38 @@ const (
 	factorConductivity = 0.0001
 )
 
-type flowercareCollector struct {
-	MacAddress         string
-	Device             string
-	upMetric           prometheus.Gauge
-	scrapeErrorsMetric prometheus.Counter
-	infoDesc           *prometheus.Desc
-	batteryDesc        *prometheus.Desc
-	conductivityDesc   *prometheus.Desc
-	lightDesc          *prometheus.Desc
-	moistureDesc       *prometheus.Desc
-	temperatureDesc    *prometheus.Desc
+type sensorData struct {
+	Time     time.Time
+	Firmware miflora.Firmware
+	Sensors  miflora.Sensors
 }
 
-func newCollector(macAddress, device string) *flowercareCollector {
+type flowercareCollector struct {
+	MacAddress    string
+	Device        string
+	CacheDuration time.Duration
+
+	cache               sensorData
+	upMetric            prometheus.Gauge
+	scrapeErrorsMetric  prometheus.Counter
+	scrapeTimestampDesc *prometheus.Desc
+	infoDesc            *prometheus.Desc
+	batteryDesc         *prometheus.Desc
+	conductivityDesc    *prometheus.Desc
+	lightDesc           *prometheus.Desc
+	moistureDesc        *prometheus.Desc
+	temperatureDesc     *prometheus.Desc
+}
+
+func newCollector(macAddress, device string, cacheDuration time.Duration) *flowercareCollector {
 	constLabels := prometheus.Labels{
 		"macaddress": strings.ToLower(macAddress),
 	}
 
 	return &flowercareCollector{
-		MacAddress: macAddress,
-		Device:     device,
+		MacAddress:    macAddress,
+		Device:        device,
+		CacheDuration: cacheDuration,
 
 		upMetric: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name:        metricPrefix + "up",
@@ -48,6 +60,10 @@ func newCollector(macAddress, device string) *flowercareCollector {
 			Help:        "Counts the number of scrape errors by this collector.",
 			ConstLabels: constLabels,
 		}),
+		scrapeTimestampDesc: prometheus.NewDesc(
+			metricPrefix+"scrape_timestamp",
+			"Contains the timestamp when the last communication with the Bluetooth device happened.",
+			nil, constLabels),
 		infoDesc: prometheus.NewDesc(
 			metricPrefix+"info",
 			"Contains information about the Flower Care device.",
@@ -79,6 +95,7 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.upMetric.Describe(ch)
 	c.scrapeErrorsMetric.Describe(ch)
 
+	ch <- c.scrapeTimestampDesc
 	ch <- c.infoDesc
 	ch <- c.batteryDesc
 	ch <- c.conductivityDesc
@@ -88,33 +105,35 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
-	if err := c.collectData(ch); err != nil {
-		log.Printf("Error during scrape: %s", err)
+	if time.Since(c.cache.Time) > c.CacheDuration {
+		data, err := c.readData()
+		if err != nil {
+			log.Printf("Error during scrape: %s", err)
 
-		c.scrapeErrorsMetric.Inc()
-		c.upMetric.Set(0)
-	} else {
-		c.upMetric.Set(1)
+			c.scrapeErrorsMetric.Inc()
+			c.upMetric.Set(0)
+		} else {
+			c.upMetric.Set(1)
+			c.cache = *data
+		}
 	}
 
 	c.upMetric.Collect(ch)
 	c.scrapeErrorsMetric.Collect(ch)
+
+	if time.Since(c.cache.Time) < c.CacheDuration {
+		if err := c.collectData(ch, c.cache); err != nil {
+			log.Printf("Error collecting metrics: %s", err)
+		}
+	}
 }
 
-func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric) error {
-	f := miflora.NewMiflora(c.MacAddress, c.Device)
-
-	firmware, err := f.ReadFirmware()
-	if err != nil {
-		return fmt.Errorf("can not read firmware: %s", err)
+func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data sensorData) error {
+	if err := sendMetric(ch, c.scrapeTimestampDesc, float64(data.Time.Unix())); err != nil {
+		return err
 	}
 
-	sensors, err := f.ReadSensors()
-	if err != nil {
-		return fmt.Errorf("can not read sensors: %s", err)
-	}
-
-	if err := sendMetric(ch, c.infoDesc, 1, firmware.Version); err != nil {
+	if err := sendMetric(ch, c.infoDesc, 1, data.Firmware.Version); err != nil {
 		return err
 	}
 
@@ -124,23 +143,23 @@ func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric) error {
 	}{
 		{
 			Desc:  c.batteryDesc,
-			Value: float64(firmware.Battery),
+			Value: float64(data.Firmware.Battery),
 		},
 		{
 			Desc:  c.conductivityDesc,
-			Value: float64(sensors.Conductivity) * factorConductivity,
+			Value: float64(data.Sensors.Conductivity) * factorConductivity,
 		},
 		{
 			Desc:  c.lightDesc,
-			Value: float64(sensors.Light),
+			Value: float64(data.Sensors.Light),
 		},
 		{
 			Desc:  c.moistureDesc,
-			Value: float64(sensors.Moisture),
+			Value: float64(data.Sensors.Moisture),
 		},
 		{
 			Desc:  c.temperatureDesc,
-			Value: sensors.Temperature,
+			Value: data.Sensors.Temperature,
 		},
 	} {
 		if err := sendMetric(ch, metric.Desc, metric.Value); err != nil {
@@ -149,6 +168,26 @@ func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric) error {
 	}
 
 	return nil
+}
+
+func (c *flowercareCollector) readData() (*sensorData, error) {
+	f := miflora.NewMiflora(c.MacAddress, c.Device)
+
+	firmware, err := f.ReadFirmware()
+	if err != nil {
+		return nil, fmt.Errorf("can not read firmware: %s", err)
+	}
+
+	sensors, err := f.ReadSensors()
+	if err != nil {
+		return nil, fmt.Errorf("can not read sensors: %s", err)
+	}
+
+	return &sensorData{
+		Time:     time.Now(),
+		Firmware: firmware,
+		Sensors:  sensors,
+	}, nil
 }
 
 func sendMetric(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) error {
