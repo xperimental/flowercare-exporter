@@ -48,7 +48,9 @@ func main() {
 	}
 
 	log.Printf("Looking for %s via %s", config.MacAddress, config.Device)
-	collector := newCollector(config.MacAddress, config.Device, config.CacheDuration)
+	reader := dataReader(config.MacAddress, config.Device)
+
+	collector := newCollector(reader, config.CacheDuration, config.MacAddress)
 	if err := prometheus.Register(collector); err != nil {
 		log.Fatalf("Failed to register collector: %s", err)
 	}

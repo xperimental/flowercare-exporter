@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/barnybug/miflora"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -17,17 +16,11 @@ const (
 	factorConductivity = 0.0001
 )
 
-type sensorData struct {
-	Time     time.Time
-	Firmware miflora.Firmware
-	Sensors  miflora.Sensors
-}
-
 type flowercareCollector struct {
 	MacAddress    string
-	Device        string
 	CacheDuration time.Duration
 
+	dataReader          func() (sensorData, error)
 	cache               sensorData
 	upMetric            prometheus.Gauge
 	scrapeErrorsMetric  prometheus.Counter
@@ -40,16 +33,16 @@ type flowercareCollector struct {
 	temperatureDesc     *prometheus.Desc
 }
 
-func newCollector(macAddress, device string, cacheDuration time.Duration) *flowercareCollector {
+func newCollector(dataReader func() (sensorData, error), cacheDuration time.Duration, macAddress string) *flowercareCollector {
 	constLabels := prometheus.Labels{
 		"macaddress": strings.ToLower(macAddress),
 	}
 
 	return &flowercareCollector{
 		MacAddress:    macAddress,
-		Device:        device,
 		CacheDuration: cacheDuration,
 
+		dataReader: dataReader,
 		upMetric: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name:        metricPrefix + "up",
 			Help:        "Shows if data could be successfully retrieved by the collector.",
@@ -106,7 +99,7 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
 	if time.Since(c.cache.Time) > c.CacheDuration {
-		data, err := c.readData()
+		data, err := c.dataReader()
 		if err != nil {
 			log.Printf("Error during scrape: %s", err)
 
@@ -114,7 +107,7 @@ func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
 			c.upMetric.Set(0)
 		} else {
 			c.upMetric.Set(1)
-			c.cache = *data
+			c.cache = data
 		}
 	}
 
@@ -168,26 +161,6 @@ func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data sens
 	}
 
 	return nil
-}
-
-func (c *flowercareCollector) readData() (*sensorData, error) {
-	f := miflora.NewMiflora(c.MacAddress, c.Device)
-
-	firmware, err := f.ReadFirmware()
-	if err != nil {
-		return nil, fmt.Errorf("can not read firmware: %s", err)
-	}
-
-	sensors, err := f.ReadSensors()
-	if err != nil {
-		return nil, fmt.Errorf("can not read sensors: %s", err)
-	}
-
-	return &sensorData{
-		Time:     time.Now(),
-		Firmware: firmware,
-		Sensors:  sensors,
-	}, nil
 }
 
 func sendMetric(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) error {
