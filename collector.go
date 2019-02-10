@@ -78,6 +78,13 @@ func newCollector(macAddress, device string) *flowercareCollector {
 func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.upMetric.Describe(ch)
 	c.scrapeErrorsMetric.Describe(ch)
+
+	ch <- c.infoDesc
+	ch <- c.batteryDesc
+	ch <- c.conductivityDesc
+	ch <- c.lightDesc
+	ch <- c.moistureDesc
+	ch <- c.temperatureDesc
 }
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
