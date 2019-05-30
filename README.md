@@ -18,20 +18,19 @@ go build .
 
 ```plain
 $ flowercare-exporter -h
-Usage of flowercare-exporter:
-  -i, --adapter string   Bluetooth device to use for communication. (default "hci0")
-  -a, --addr string      Address to listen on for connections. (default ":9294")
-  -b, --device string    MAC-Address of Flower Care device.
+Usage of ./flowercare-exporter:
+  -i, --adapter string            Bluetooth device to use for communication. (default "hci0")
+  -a, --addr string               Address to listen on for connections. (default ":9294")
+  -c, --cache-duration duration   Interval during which the results from the Bluetooth device are cached. (default 2m0s)
+  -s, --sensor address            MAC-address of sensor to collect data from. Can be specified multiple times.
 ```
 
 After starting the server will offer the metrics on the `/metrics` endpoint, which can be used as a target for prometheus.
 
-The exporter will query the bluetooth device every time it is scraped by prometheus. The default scrape interval is usually not necessary, because the data does not change this frequently. I recommend setting a longer `scrape_interval`, so that the battery of your device lasts longer:
+The exporter uses an internal cache, so that each scrape of the exporter does not try to read data from the sensors to avoid unnecessary drain of the battery.
 
-```yml
-scrape_configs:
-- job_name: 'flowercare'
-  scrape_interval: 120s
-  static_configs:
-  - targets: ['localhost:9294']
+All sensors can optionally have a "name" assigned to them, so they are more easily identifiable in the metrics. This is possible by prefixing the MAC-address with `name=`, for example:
+
+```bash
+./flowercare-exporter -s tomatoes=AA:BB:CC:DD:EE:FF
 ```
