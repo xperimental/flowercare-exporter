@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,7 +31,7 @@ func main() {
 		}
 	}
 
-	http.Handle("/metrics", prometheus.UninstrumentedHandler())
+	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/", http.RedirectHandler("/metrics", http.StatusFound))
 
 	log.Infof("Listen on %s...", config.ListenAddr)
