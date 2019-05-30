@@ -10,6 +10,10 @@ import (
 
 var (
 	log = logrus.New()
+
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
@@ -30,6 +34,18 @@ func main() {
 			log.Fatalf("Failed to register collector: %s", err)
 		}
 	}
+
+	versionMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: metricPrefix + "build_info",
+		Help: "Contains build information as labels. Value set to 1.",
+		ConstLabels: prometheus.Labels{
+			"version": version,
+			"commit":  commit,
+			"date":    date,
+		},
+	})
+	versionMetric.Set(1)
+	prometheus.MustRegister(versionMetric)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/", http.RedirectHandler("/metrics", http.StatusFound))
