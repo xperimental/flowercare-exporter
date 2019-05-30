@@ -13,7 +13,7 @@ type sensorData struct {
 	Sensors  miflora.Sensors
 }
 
-func dataReader(macAddress, device string) func() (sensorData, error) {
+func newDataReader(macAddress, device string) func() (sensorData, error) {
 	return func() (sensorData, error) {
 		f := miflora.NewMiflora(macAddress, device)
 

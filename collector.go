@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -17,7 +16,7 @@ const (
 )
 
 type flowercareCollector struct {
-	MacAddress    string
+	Sensor        sensor
 	CacheDuration time.Duration
 
 	dataReader          func() (sensorData, error)
@@ -33,13 +32,14 @@ type flowercareCollector struct {
 	temperatureDesc     *prometheus.Desc
 }
 
-func newCollector(dataReader func() (sensorData, error), cacheDuration time.Duration, macAddress string) *flowercareCollector {
+func newCollector(dataReader func() (sensorData, error), cacheDuration time.Duration, sensorInfo sensor) *flowercareCollector {
 	constLabels := prometheus.Labels{
-		"macaddress": strings.ToLower(macAddress),
+		"macaddress": strings.ToLower(sensorInfo.MacAddress),
+		"name":       sensorInfo.Name,
 	}
 
 	return &flowercareCollector{
-		MacAddress:    macAddress,
+		Sensor:        sensorInfo,
 		CacheDuration: cacheDuration,
 
 		dataReader: dataReader,
