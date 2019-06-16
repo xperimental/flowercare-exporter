@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -100,19 +102,6 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
-	if time.Since(c.cache.Time) > c.RefreshDuration {
-		data, err := c.dataReader()
-		if err != nil {
-			log.Printf("Error during scrape: %s", err)
-
-			c.scrapeErrorsMetric.Inc()
-			c.upMetric.Set(0)
-		} else {
-			c.upMetric.Set(1)
-			c.cache = data
-		}
-	}
-
 	c.upMetric.Collect(ch)
 	c.scrapeErrorsMetric.Collect(ch)
 
@@ -120,6 +109,43 @@ func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
 		if err := c.collectData(ch, c.cache); err != nil {
 			log.Printf("Error collecting metrics: %s", err)
 		}
+	}
+}
+
+func (c *flowercareCollector) StartUpdate(ctx context.Context, wg *sync.WaitGroup) {
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		refresh := time.NewTicker(c.RefreshDuration)
+		defer refresh.Stop()
+
+		// Trigger first refresh
+		go c.doRefresh()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-refresh.C:
+				c.doRefresh()
+			}
+		}
+	}()
+}
+
+func (c *flowercareCollector) doRefresh() {
+	log.Debugf("Updating %q", c.Sensor)
+	data, err := c.dataReader()
+	if err != nil {
+		log.Printf("Error updating %q: %s", c.Sensor, err)
+
+		c.scrapeErrorsMetric.Inc()
+		c.upMetric.Set(0)
+	} else {
+		c.upMetric.Set(1)
+		c.cache = data
 	}
 }
 

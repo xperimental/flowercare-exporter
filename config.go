@@ -69,23 +69,23 @@ func parseSensor(value string) (sensor, error) {
 }
 
 type config struct {
-	ListenAddr    string
-	Sensors       sensorList
-	Device        string
-	CacheDuration time.Duration
+	ListenAddr      string
+	Sensors         sensorList
+	Device          string
+	RefreshDuration time.Duration
 }
 
 func parseConfig() (config, error) {
 	result := config{
-		ListenAddr:    ":9294",
-		Device:        "hci0",
-		CacheDuration: 2 * time.Minute,
+		ListenAddr:      ":9294",
+		Device:          "hci0",
+		RefreshDuration: 2 * time.Minute,
 	}
 
 	pflag.StringVarP(&result.ListenAddr, "addr", "a", result.ListenAddr, "Address to listen on for connections.")
 	pflag.VarP(&result.Sensors, "sensor", "s", "MAC-address of sensor to collect data from. Can be specified multiple times.")
 	pflag.StringVarP(&result.Device, "adapter", "i", result.Device, "Bluetooth device to use for communication.")
-	pflag.DurationVarP(&result.CacheDuration, "cache-duration", "c", result.CacheDuration, "Interval during which the results from the Bluetooth device are cached.")
+	pflag.DurationVarP(&result.RefreshDuration, "refresh-duration", "r", result.RefreshDuration, "Interval used for refreshing data from bluetooth devices.")
 	pflag.Parse()
 
 	if len(result.Sensors) == 0 {
@@ -94,6 +94,10 @@ func parseConfig() (config, error) {
 
 	if len(result.Device) == 0 {
 		return result, errors.New("need to provide a bluetooth device")
+	}
+
+	if result.RefreshDuration < time.Minute {
+		log.Warnf("Refresh durations below one minute are discouraged: %s", result.RefreshDuration)
 	}
 
 	return result, nil

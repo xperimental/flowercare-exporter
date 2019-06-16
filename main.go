@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -24,15 +29,31 @@ func main() {
 
 	log.Infof("Bluetooth Device: %s", config.Device)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	go func() {
+		sigCh := make(chan os.Signal)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+		<-sigCh
+		log.Debug("Got shutdown signal.")
+
+		signal.Reset()
+		cancel()
+	}()
+
 	for _, s := range config.Sensors {
 		log.Infof("Sensor: %s", s)
 
 		reader := newDataReader(s.MacAddress, config.Device)
-		collector := newCollector(reader, config.CacheDuration, s)
+		collector := newCollector(reader, config.RefreshDuration, s)
 
 		if err := prometheus.Register(collector); err != nil {
 			log.Fatalf("Failed to register collector: %s", err)
 		}
+
+		collector.StartUpdate(ctx, wg)
 	}
 
 	versionMetric := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -50,6 +71,12 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/", http.RedirectHandler("/metrics", http.StatusFound))
 
-	log.Infof("Listen on %s...", config.ListenAddr)
-	log.Fatal(http.ListenAndServe(config.ListenAddr, nil))
+	go func() {
+		log.Infof("Listen on %s...", config.ListenAddr)
+		log.Fatal(http.ListenAndServe(config.ListenAddr, nil))
+	}()
+
+	log.Info("Startup complete.")
+	wg.Wait()
+	log.Info("Shutdown complete.")
 }
