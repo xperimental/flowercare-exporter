@@ -44,7 +44,7 @@ func newCollector(dataReader func() (sensorData, error), refreshDuration time.Du
 	return &flowercareCollector{
 		Sensor:          sensorInfo,
 		RefreshDuration: refreshDuration,
-		ForgetDuration:  refreshDuration * 2,
+		ForgetDuration:  time.Duration(float64(refreshDuration) * 2.1),
 
 		dataReader: dataReader,
 		upMetric: prometheus.NewGauge(prometheus.GaugeOpts{
