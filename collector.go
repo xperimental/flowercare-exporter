@@ -16,8 +16,9 @@ const (
 )
 
 type flowercareCollector struct {
-	Sensor        sensor
-	CacheDuration time.Duration
+	Sensor          sensor
+	RefreshDuration time.Duration
+	ForgetDuration  time.Duration
 
 	dataReader          func() (sensorData, error)
 	cache               sensorData
@@ -32,15 +33,16 @@ type flowercareCollector struct {
 	temperatureDesc     *prometheus.Desc
 }
 
-func newCollector(dataReader func() (sensorData, error), cacheDuration time.Duration, sensorInfo sensor) *flowercareCollector {
+func newCollector(dataReader func() (sensorData, error), refreshDuration time.Duration, sensorInfo sensor) *flowercareCollector {
 	constLabels := prometheus.Labels{
 		"macaddress": strings.ToLower(sensorInfo.MacAddress),
 		"name":       sensorInfo.Name,
 	}
 
 	return &flowercareCollector{
-		Sensor:        sensorInfo,
-		CacheDuration: cacheDuration,
+		Sensor:          sensorInfo,
+		RefreshDuration: refreshDuration,
+		ForgetDuration:  refreshDuration * 2,
 
 		dataReader: dataReader,
 		upMetric: prometheus.NewGauge(prometheus.GaugeOpts{
@@ -98,7 +100,7 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
-	if time.Since(c.cache.Time) > c.CacheDuration {
+	if time.Since(c.cache.Time) > c.RefreshDuration {
 		data, err := c.dataReader()
 		if err != nil {
 			log.Printf("Error during scrape: %s", err)
@@ -114,7 +116,7 @@ func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
 	c.upMetric.Collect(ch)
 	c.scrapeErrorsMetric.Collect(ch)
 
-	if time.Since(c.cache.Time) < c.CacheDuration {
+	if time.Since(c.cache.Time) < c.ForgetDuration {
 		if err := c.collectData(ch, c.cache); err != nil {
 			log.Printf("Error collecting metrics: %s", err)
 		}
