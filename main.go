@@ -22,6 +22,15 @@ var (
 )
 
 func main() {
+	if logLevelStr := os.Getenv("LOG_LEVEL"); logLevelStr != "" {
+		logLevel, err := logrus.ParseLevel(logLevelStr)
+		if err != nil {
+			log.Fatalf("Invalid log level %q: %s", logLevelStr, err)
+		}
+
+		log.SetLevel(logLevel)
+	}
+
 	config, err := parseConfig()
 	if err != nil {
 		log.Fatalf("Error in configuration: %s", err)
