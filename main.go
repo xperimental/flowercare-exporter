@@ -43,10 +43,13 @@ func main() {
 		cancel()
 	}()
 
+	reader := newQueuedDataReader()
+	reader.Run(ctx, wg)
+
 	for _, s := range config.Sensors {
 		log.Infof("Sensor: %s", s)
 
-		reader := newDataReader(s.MacAddress, config.Device)
+		reader := reader.ReadFunc(s.MacAddress, config.Device)
 		collector := newCollector(reader, config.RefreshDuration, s)
 
 		if err := prometheus.Register(collector); err != nil {
