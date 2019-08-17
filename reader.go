@@ -48,13 +48,15 @@ type queryResult struct {
 }
 
 type queuedReader struct {
-	shutdown bool
-	queryCh  chan query
+	cooldownPeriod time.Duration
+	shutdown       bool
+	queryCh        chan query
 }
 
-func newQueuedDataReader() *queuedReader {
+func newQueuedDataReader(cooldownPeriod time.Duration) *queuedReader {
 	return &queuedReader{
-		queryCh: make(chan query, 1),
+		cooldownPeriod: cooldownPeriod,
+		queryCh:        make(chan query, 1),
 	}
 }
 
@@ -80,6 +82,10 @@ func (r *queuedReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 					Err:  err,
 				}
 				close(q.Result)
+
+				if r.cooldownPeriod > 0 {
+					time.Sleep(r.cooldownPeriod)
+				}
 			}
 		}
 	}()

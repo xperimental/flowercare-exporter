@@ -73,6 +73,7 @@ type config struct {
 	Sensors         sensorList
 	Device          string
 	RefreshDuration time.Duration
+	CooldownPeriod  time.Duration
 }
 
 func parseConfig() (config, error) {
@@ -80,12 +81,14 @@ func parseConfig() (config, error) {
 		ListenAddr:      ":9294",
 		Device:          "hci0",
 		RefreshDuration: 2 * time.Minute,
+		CooldownPeriod:  30 * time.Second,
 	}
 
 	pflag.StringVarP(&result.ListenAddr, "addr", "a", result.ListenAddr, "Address to listen on for connections.")
 	pflag.VarP(&result.Sensors, "sensor", "s", "MAC-address of sensor to collect data from. Can be specified multiple times.")
 	pflag.StringVarP(&result.Device, "adapter", "i", result.Device, "Bluetooth device to use for communication.")
 	pflag.DurationVarP(&result.RefreshDuration, "refresh-duration", "r", result.RefreshDuration, "Interval used for refreshing data from bluetooth devices.")
+	pflag.DurationVar(&result.CooldownPeriod, "cool-down-period", result.CooldownPeriod, "Time to wait between subsequent access to Bluetooth device.")
 	pflag.Parse()
 
 	if len(result.Sensors) == 0 {

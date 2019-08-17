@@ -52,7 +52,7 @@ func main() {
 		cancel()
 	}()
 
-	reader := newQueuedDataReader()
+	reader := newQueuedDataReader(config.CooldownPeriod)
 	reader.Run(ctx, wg)
 
 	for _, s := range config.Sensors {
