@@ -3,61 +3,44 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
-	"github.com/barnybug/miflora"
+	"github.com/go-ble/ble"
+	"github.com/go-ble/ble/linux"
+	"github.com/xperimental/flowercare-exporter/pkg/miflora"
 )
-
-type sensorData struct {
-	Time     time.Time
-	Firmware miflora.Firmware
-	Sensors  miflora.Sensors
-}
-
-func readData(macAddress, device string) (sensorData, error) {
-	f := miflora.NewMiflora(macAddress, device)
-
-	firmware, err := f.ReadFirmware()
-	if err != nil {
-		return sensorData{}, fmt.Errorf("can not read firmware: %s", err)
-	}
-
-	sensors, err := f.ReadSensors()
-	if err != nil {
-		return sensorData{}, fmt.Errorf("can not read sensors: %s", err)
-	}
-
-	return sensorData{
-		Time:     time.Now(),
-		Firmware: firmware,
-		Sensors:  sensors,
-	}, nil
-}
 
 type query struct {
 	MacAddress string
-	Device     string
 	Result     chan queryResult
 }
 
 type queryResult struct {
-	Data sensorData
+	Data miflora.Data
 	Err  error
 }
 
 type queuedReader struct {
 	cooldownPeriod time.Duration
+	deviceName     string
 	shutdown       bool
 	queryCh        chan query
+	device         ble.Device
 }
 
-func newQueuedDataReader(cooldownPeriod time.Duration) *queuedReader {
+func newQueuedDataReader(cooldownPeriod time.Duration, deviceName string) (*queuedReader, error) {
+	device, err := linux.NewDeviceWithName(deviceName)
+	if err != nil {
+		return nil, err
+	}
+
 	return &queuedReader{
 		cooldownPeriod: cooldownPeriod,
+		deviceName:     deviceName,
 		queryCh:        make(chan query, 1),
-	}
+		device:         device,
+	}, nil
 }
 
 func (r *queuedReader) Run(ctx context.Context, wg *sync.WaitGroup) {
@@ -74,8 +57,8 @@ func (r *queuedReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 				r.shutdown = true
 				return
 			case q := <-r.queryCh:
-				log.Debugf("Reading data for %q on %q", q.MacAddress, q.Device)
-				data, err := readData(q.MacAddress, q.Device)
+				log.Debugf("Reading data for %q on %q", q.MacAddress, r.deviceName)
+				data, err := miflora.ReadData(ctx, log, r.device, q.MacAddress)
 
 				q.Result <- queryResult{
 					Data: data,
@@ -91,16 +74,15 @@ func (r *queuedReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
-func (r *queuedReader) ReadFunc(macAddress, device string) func() (sensorData, error) {
-	log.Debugf("Creating reader for %q on %q", macAddress, device)
-	return func() (sensorData, error) {
+func (r *queuedReader) ReadFunc(macAddress string) func() (miflora.Data, error) {
+	log.Debugf("Creating reader for %q on %q", macAddress, r.deviceName)
+	return func() (miflora.Data, error) {
 		if r.shutdown {
-			return sensorData{}, errors.New("reader shut down")
+			return miflora.Data{}, errors.New("reader shut down")
 		}
 
 		q := query{
 			MacAddress: macAddress,
-			Device:     device,
 			Result:     make(chan queryResult),
 		}
 
@@ -108,7 +90,7 @@ func (r *queuedReader) ReadFunc(macAddress, device string) func() (sensorData, e
 
 		res, ok := <-q.Result
 		if !ok {
-			return sensorData{}, errors.New("channel closed")
+			return miflora.Data{}, errors.New("channel closed")
 		}
 
 		return res.Data, res.Err

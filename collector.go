@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/xperimental/flowercare-exporter/pkg/miflora"
 )
 
 const (
@@ -22,8 +23,8 @@ type flowercareCollector struct {
 	RefreshDuration time.Duration
 	ForgetDuration  time.Duration
 
-	dataReader          func() (sensorData, error)
-	cache               sensorData
+	dataReader          func() (miflora.Data, error)
+	cache               miflora.Data
 	upMetric            prometheus.Gauge
 	scrapeErrorsMetric  prometheus.Counter
 	scrapeTimestampDesc *prometheus.Desc
@@ -35,7 +36,7 @@ type flowercareCollector struct {
 	temperatureDesc     *prometheus.Desc
 }
 
-func newCollector(dataReader func() (sensorData, error), refreshDuration time.Duration, sensorInfo sensor) *flowercareCollector {
+func newCollector(dataReader func() (miflora.Data, error), refreshDuration time.Duration, sensorInfo sensor) *flowercareCollector {
 	constLabels := prometheus.Labels{
 		"macaddress": strings.ToLower(sensorInfo.MacAddress),
 		"name":       sensorInfo.Name,
@@ -149,7 +150,7 @@ func (c *flowercareCollector) doRefresh() {
 	}
 }
 
-func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data sensorData) error {
+func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data miflora.Data) error {
 	if err := sendMetric(ch, c.scrapeTimestampDesc, float64(data.Time.Unix())); err != nil {
 		return err
 	}

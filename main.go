@@ -52,13 +52,17 @@ func main() {
 		cancel()
 	}()
 
-	reader := newQueuedDataReader(config.CooldownPeriod)
+	reader, err := newQueuedDataReader(config.CooldownPeriod, config.Device)
+	if err != nil {
+		log.Fatalf("Error creating device: %s", err)
+	}
+
 	reader.Run(ctx, wg)
 
 	for _, s := range config.Sensors {
 		log.Infof("Sensor: %s", s)
 
-		reader := reader.ReadFunc(s.MacAddress, config.Device)
+		reader := reader.ReadFunc(s.MacAddress)
 		collector := newCollector(reader, config.RefreshDuration, s)
 
 		if err := prometheus.Register(collector); err != nil {
