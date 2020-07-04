@@ -1,5 +1,7 @@
 module github.com/xperimental/flowercare-exporter
 
+go 1.14
+
 require (
 	github.com/barnybug/miflora v0.0.0-20190206202408-36c55fde159f
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
