@@ -2,8 +2,6 @@
 
 A [prometheus](https://prometheus.io) exporter which can read data from Xiaomi MiFlora / HHCC Flower Care devices using Bluetooth.
 
-It uses the `gatttool` from BlueZ to do the actual Bluetooth communication, so it probably only works on Linux. Getting rid of this dependency and doing the communication directly in Go would be great, especially for portability.
-
 ## Installation
 
 First clone the repository, then run the following command to get a binary for your current operating system / architecture. This assumes a working Go installation with modules support (Go >= 1.11.0):
