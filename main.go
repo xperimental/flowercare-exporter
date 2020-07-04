@@ -11,10 +11,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+	"github.com/xperimental/flowercare-exporter/internal/config"
 )
 
 var (
-	log = logrus.New()
+	log = &logrus.Logger{
+		Out: os.Stderr,
+		Formatter: &logrus.TextFormatter{
+			DisableTimestamp: true,
+		},
+		Hooks:        make(logrus.LevelHooks),
+		Level:        logrus.InfoLevel,
+		ExitFunc:     os.Exit,
+		ReportCaller: false,
+	}
 
 	version = "dev"
 	commit  = "none"
@@ -31,7 +41,7 @@ func main() {
 		log.SetLevel(logLevel)
 	}
 
-	config, err := parseConfig()
+	config, err := config.Parse(log)
 	if err != nil {
 		log.Fatalf("Error in configuration: %s", err)
 	}

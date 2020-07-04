@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"errors"
@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
 
-type sensorList []sensor
+type SensorList []Sensor
 
-func (s *sensorList) String() string {
+func (s *SensorList) String() string {
 	if len(*s) == 0 {
 		return ""
 	}
@@ -23,11 +24,11 @@ func (s *sensorList) String() string {
 	return fmt.Sprintf("%s", sensors)
 }
 
-func (s *sensorList) Type() string {
+func (s *SensorList) Type() string {
 	return "address"
 }
 
-func (s *sensorList) Set(value string) error {
+func (s *SensorList) Set(value string) error {
 	sensor, err := parseSensor(value)
 	if err != nil {
 		return fmt.Errorf("can not parse sensor: %s", err)
@@ -37,12 +38,12 @@ func (s *sensorList) Set(value string) error {
 	return nil
 }
 
-type sensor struct {
+type Sensor struct {
 	Name       string
 	MacAddress string
 }
 
-func (s sensor) String() string {
+func (s Sensor) String() string {
 	if s.Name == "" {
 		return s.MacAddress
 	}
@@ -50,34 +51,34 @@ func (s sensor) String() string {
 	return fmt.Sprintf("%s (%s)", s.Name, s.MacAddress)
 }
 
-func parseSensor(value string) (sensor, error) {
+func parseSensor(value string) (Sensor, error) {
 	if len(value) == 0 {
-		return sensor{}, errors.New("empty string")
+		return Sensor{}, errors.New("empty string")
 	}
 
 	tokens := strings.SplitN(value, "=", 2)
 	if len(tokens) == 1 {
-		return sensor{
+		return Sensor{
 			MacAddress: tokens[0],
 		}, nil
 	}
 
-	return sensor{
+	return Sensor{
 		Name:       tokens[0],
 		MacAddress: tokens[1],
 	}, nil
 }
 
-type config struct {
+type Config struct {
 	ListenAddr      string
-	Sensors         sensorList
+	Sensors         SensorList
 	Device          string
 	RefreshDuration time.Duration
 	CooldownPeriod  time.Duration
 }
 
-func parseConfig() (config, error) {
-	result := config{
+func Parse(log logrus.FieldLogger) (Config, error) {
+	result := Config{
 		ListenAddr:      ":9294",
 		Device:          "hci0",
 		RefreshDuration: 2 * time.Minute,

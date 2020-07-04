@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/xperimental/flowercare-exporter/internal/config"
 	"github.com/xperimental/flowercare-exporter/pkg/miflora"
 )
 
@@ -19,7 +20,7 @@ const (
 )
 
 type flowercareCollector struct {
-	Sensor          sensor
+	Sensor          config.Sensor
 	RefreshDuration time.Duration
 	ForgetDuration  time.Duration
 
@@ -36,7 +37,7 @@ type flowercareCollector struct {
 	temperatureDesc     *prometheus.Desc
 }
 
-func newCollector(dataReader func() (miflora.Data, error), refreshDuration time.Duration, sensorInfo sensor) *flowercareCollector {
+func newCollector(dataReader func() (miflora.Data, error), refreshDuration time.Duration, sensorInfo config.Sensor) *flowercareCollector {
 	constLabels := prometheus.Labels{
 		"macaddress": strings.ToLower(sensorInfo.MacAddress),
 		"name":       sensorInfo.Name,
