@@ -69,7 +69,28 @@ func parseSensor(value string) (Sensor, error) {
 	}, nil
 }
 
+type LogLevel logrus.Level
+
+func (l *LogLevel) Type() string {
+	return "level"
+}
+
+func (l *LogLevel) String() string {
+	return fmt.Sprintf("%s", logrus.Level(*l))
+}
+
+func (l *LogLevel) Set(val string) error {
+	level, err := logrus.ParseLevel(val)
+	if err != nil {
+		return err
+	}
+
+	*l = LogLevel(level)
+	return nil
+}
+
 type Config struct {
+	LogLevel        LogLevel
 	ListenAddr      string
 	Sensors         SensorList
 	Device          string
@@ -79,12 +100,14 @@ type Config struct {
 
 func Parse(log logrus.FieldLogger) (Config, error) {
 	result := Config{
+		LogLevel:        LogLevel(logrus.InfoLevel),
 		ListenAddr:      ":9294",
 		Device:          "hci0",
 		RefreshDuration: 2 * time.Minute,
 		CooldownPeriod:  30 * time.Second,
 	}
 
+	pflag.Var(&result.LogLevel, "log-level", "Minimum log level to show.")
 	pflag.StringVarP(&result.ListenAddr, "addr", "a", result.ListenAddr, "Address to listen on for connections.")
 	pflag.VarP(&result.Sensors, "sensor", "s", "MAC-address of sensor to collect data from. Can be specified multiple times.")
 	pflag.StringVarP(&result.Device, "adapter", "i", result.Device, "Bluetooth device to use for communication.")

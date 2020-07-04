@@ -32,20 +32,12 @@ var (
 )
 
 func main() {
-	if logLevelStr := os.Getenv("LOG_LEVEL"); logLevelStr != "" {
-		logLevel, err := logrus.ParseLevel(logLevelStr)
-		if err != nil {
-			log.Fatalf("Invalid log level %q: %s", logLevelStr, err)
-		}
-
-		log.SetLevel(logLevel)
-	}
-
 	config, err := config.Parse(log)
 	if err != nil {
 		log.Fatalf("Error in configuration: %s", err)
 	}
 
+	log.SetLevel(logrus.Level(config.LogLevel))
 	log.Infof("Bluetooth Device: %s", config.Device)
 
 	ctx, cancel := context.WithCancel(context.Background())
