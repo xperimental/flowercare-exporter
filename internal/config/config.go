@@ -95,6 +95,7 @@ type Config struct {
 	Sensors         SensorList
 	Device          string
 	RefreshDuration time.Duration
+	StaleDuration   time.Duration
 	CooldownPeriod  time.Duration
 }
 
@@ -104,6 +105,7 @@ func Parse(log logrus.FieldLogger) (Config, error) {
 		ListenAddr:      ":9294",
 		Device:          "hci0",
 		RefreshDuration: 2 * time.Minute,
+		StaleDuration:   5 * time.Minute,
 		CooldownPeriod:  30 * time.Second,
 	}
 
@@ -112,6 +114,7 @@ func Parse(log logrus.FieldLogger) (Config, error) {
 	pflag.VarP(&result.Sensors, "sensor", "s", "MAC-address of sensor to collect data from. Can be specified multiple times.")
 	pflag.StringVarP(&result.Device, "adapter", "i", result.Device, "Bluetooth device to use for communication.")
 	pflag.DurationVarP(&result.RefreshDuration, "refresh-duration", "r", result.RefreshDuration, "Interval used for refreshing data from bluetooth devices.")
+	pflag.DurationVar(&result.StaleDuration, "stale-duration", result.StaleDuration, "Duration after which data is considered stale and is not used for metrics anymore.")
 	pflag.DurationVar(&result.CooldownPeriod, "cool-down-period", result.CooldownPeriod, "Time to wait between subsequent access to Bluetooth device.")
 	pflag.Parse()
 
@@ -125,6 +128,10 @@ func Parse(log logrus.FieldLogger) (Config, error) {
 
 	if result.RefreshDuration < time.Minute {
 		log.Warnf("Refresh durations below one minute are discouraged: %s", result.RefreshDuration)
+	}
+
+	if result.StaleDuration < (2 * result.RefreshDuration) {
+		return result, fmt.Errorf("stale duration needs to be at least %d", 2*result.RefreshDuration)
 	}
 
 	return result, nil
