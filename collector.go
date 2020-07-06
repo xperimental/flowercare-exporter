@@ -19,22 +19,50 @@ const (
 	factorConductivity = 0.0001
 )
 
+var (
+	varLabelNames = []string{
+		"macaddress",
+		"name",
+	}
+	scrapeTimestampDesc = prometheus.NewDesc(
+		metricPrefix+"scrape_timestamp",
+		"Contains the timestamp when the last communication with the Bluetooth device happened.",
+		varLabelNames, nil)
+	infoDesc = prometheus.NewDesc(
+		metricPrefix+"info",
+		"Contains information about the Flower Care device.",
+		append(varLabelNames, "version"), nil)
+	batteryDesc = prometheus.NewDesc(
+		metricPrefix+"battery_percent",
+		"Battery level in percent.",
+		varLabelNames, nil)
+	conductivityDesc = prometheus.NewDesc(
+		metricPrefix+"conductivity_sm",
+		"Soil conductivity in Siemens/meter.",
+		varLabelNames, nil)
+	lightDesc = prometheus.NewDesc(
+		metricPrefix+"brightness_lux",
+		"Ambient lighting in lux.",
+		varLabelNames, nil)
+	moistureDesc = prometheus.NewDesc(
+		metricPrefix+"moisture_percent",
+		"Soil relative moisture in percent.",
+		varLabelNames, nil)
+	temperatureDesc = prometheus.NewDesc(
+		metricPrefix+"temperature_celsius",
+		"Ambient temperature in celsius.",
+		varLabelNames, nil)
+)
+
 type flowercareCollector struct {
 	Sensor          config.Sensor
 	RefreshDuration time.Duration
 	ForgetDuration  time.Duration
 
-	dataReader          func() (miflora.Data, error)
-	cache               miflora.Data
-	upMetric            prometheus.Gauge
-	scrapeErrorsMetric  prometheus.Counter
-	scrapeTimestampDesc *prometheus.Desc
-	infoDesc            *prometheus.Desc
-	batteryDesc         *prometheus.Desc
-	conductivityDesc    *prometheus.Desc
-	lightDesc           *prometheus.Desc
-	moistureDesc        *prometheus.Desc
-	temperatureDesc     *prometheus.Desc
+	dataReader         func() (miflora.Data, error)
+	cache              miflora.Data
+	upMetric           prometheus.Gauge
+	scrapeErrorsMetric prometheus.Counter
 }
 
 func newCollector(dataReader func() (miflora.Data, error), refreshDuration time.Duration, sensorInfo config.Sensor) *flowercareCollector {
@@ -59,34 +87,6 @@ func newCollector(dataReader func() (miflora.Data, error), refreshDuration time.
 			Help:        "Counts the number of scrape errors by this collector.",
 			ConstLabels: constLabels,
 		}),
-		scrapeTimestampDesc: prometheus.NewDesc(
-			metricPrefix+"scrape_timestamp",
-			"Contains the timestamp when the last communication with the Bluetooth device happened.",
-			nil, constLabels),
-		infoDesc: prometheus.NewDesc(
-			metricPrefix+"info",
-			"Contains information about the Flower Care device.",
-			[]string{"version"}, constLabels),
-		batteryDesc: prometheus.NewDesc(
-			metricPrefix+"battery_percent",
-			"Battery level in percent.",
-			nil, constLabels),
-		conductivityDesc: prometheus.NewDesc(
-			metricPrefix+"conductivity_sm",
-			"Soil conductivity in Siemens/meter.",
-			nil, constLabels),
-		lightDesc: prometheus.NewDesc(
-			metricPrefix+"brightness_lux",
-			"Ambient lighting in lux.",
-			nil, constLabels),
-		moistureDesc: prometheus.NewDesc(
-			metricPrefix+"moisture_percent",
-			"Soil relative moisture in percent.",
-			nil, constLabels),
-		temperatureDesc: prometheus.NewDesc(
-			metricPrefix+"temperature_celsius",
-			"Ambient temperature in celsius.",
-			nil, constLabels),
 	}
 }
 
@@ -94,13 +94,13 @@ func (c *flowercareCollector) Describe(ch chan<- *prometheus.Desc) {
 	c.upMetric.Describe(ch)
 	c.scrapeErrorsMetric.Describe(ch)
 
-	ch <- c.scrapeTimestampDesc
-	ch <- c.infoDesc
-	ch <- c.batteryDesc
-	ch <- c.conductivityDesc
-	ch <- c.lightDesc
-	ch <- c.moistureDesc
-	ch <- c.temperatureDesc
+	ch <- scrapeTimestampDesc
+	ch <- infoDesc
+	ch <- batteryDesc
+	ch <- conductivityDesc
+	ch <- lightDesc
+	ch <- moistureDesc
+	ch <- temperatureDesc
 }
 
 func (c *flowercareCollector) Collect(ch chan<- prometheus.Metric) {
@@ -152,11 +152,11 @@ func (c *flowercareCollector) doRefresh() {
 }
 
 func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data miflora.Data) error {
-	if err := sendMetric(ch, c.scrapeTimestampDesc, float64(data.Time.Unix())); err != nil {
+	if err := sendMetric(ch, scrapeTimestampDesc, float64(data.Time.Unix())); err != nil {
 		return err
 	}
 
-	if err := sendMetric(ch, c.infoDesc, 1, data.Firmware.Version); err != nil {
+	if err := sendMetric(ch, infoDesc, 1, data.Firmware.Version); err != nil {
 		return err
 	}
 
@@ -165,23 +165,23 @@ func (c *flowercareCollector) collectData(ch chan<- prometheus.Metric, data mifl
 		Value float64
 	}{
 		{
-			Desc:  c.batteryDesc,
+			Desc:  batteryDesc,
 			Value: float64(data.Firmware.Battery),
 		},
 		{
-			Desc:  c.conductivityDesc,
+			Desc:  conductivityDesc,
 			Value: float64(data.Sensors.Conductivity) * factorConductivity,
 		},
 		{
-			Desc:  c.lightDesc,
+			Desc:  lightDesc,
 			Value: float64(data.Sensors.Light),
 		},
 		{
-			Desc:  c.moistureDesc,
+			Desc:  moistureDesc,
 			Value: float64(data.Sensors.Moisture),
 		},
 		{
-			Desc:  c.temperatureDesc,
+			Desc:  temperatureDesc,
 			Value: data.Sensors.Temperature,
 		},
 	} {
