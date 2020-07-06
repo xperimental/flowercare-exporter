@@ -96,7 +96,6 @@ type Config struct {
 	Device          string
 	RefreshDuration time.Duration
 	StaleDuration   time.Duration
-	CooldownPeriod  time.Duration
 }
 
 func Parse(log logrus.FieldLogger) (Config, error) {
@@ -106,7 +105,6 @@ func Parse(log logrus.FieldLogger) (Config, error) {
 		Device:          "hci0",
 		RefreshDuration: 2 * time.Minute,
 		StaleDuration:   5 * time.Minute,
-		CooldownPeriod:  30 * time.Second,
 	}
 
 	pflag.Var(&result.LogLevel, "log-level", "Minimum log level to show.")
@@ -115,7 +113,6 @@ func Parse(log logrus.FieldLogger) (Config, error) {
 	pflag.StringVarP(&result.Device, "adapter", "i", result.Device, "Bluetooth device to use for communication.")
 	pflag.DurationVarP(&result.RefreshDuration, "refresh-duration", "r", result.RefreshDuration, "Interval used for refreshing data from bluetooth devices.")
 	pflag.DurationVar(&result.StaleDuration, "stale-duration", result.StaleDuration, "Duration after which data is considered stale and is not used for metrics anymore.")
-	pflag.DurationVar(&result.CooldownPeriod, "cool-down-period", result.CooldownPeriod, "Time to wait between subsequent access to Bluetooth device.")
 	pflag.Parse()
 
 	if len(result.Sensors) == 0 {
