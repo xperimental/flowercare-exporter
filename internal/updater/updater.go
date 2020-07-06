@@ -76,19 +76,44 @@ func (u *Updater) GetData(macAddress string) (miflora.Data, error) {
 // Update starts an update run, which tries to get new data for all registered sensors.
 func (u *Updater) Update(ctx context.Context, now time.Time) {
 	u.log.Debugf("Starting update at %s", now.UTC())
-	u.dataLock.Lock()
-	defer u.dataLock.Unlock()
+	sensors := u.getSensors()
 
-	for _, d := range u.dataMap {
-		s := d.Info
+	updates := map[string]miflora.Data{}
+	for _, s := range sensors {
 		u.log.Debugf("Reading data for %q on %q", s.MacAddress, u.deviceName)
 
 		data, err := miflora.ReadData(ctx, u.log, u.device, s.MacAddress)
 		if err != nil {
-			u.log.Errorf("Error updating data for %q: %s", s, err)
+			u.log.Errorf("Error getting data for %q: %s", s, err)
 			continue
 		}
 
-		d.Data = &data
+		updates[s.MacAddress] = data
 	}
+
+	u.dataLock.Lock()
+	defer u.dataLock.Unlock()
+
+	for k, d := range updates {
+		cached, ok := u.dataMap[k]
+		if !ok {
+			u.log.Errorf("Sensor not found for update: %s", k)
+			continue
+		}
+
+		d := d
+		cached.Data = &d
+	}
+}
+
+func (u *Updater) getSensors() []config.Sensor {
+	u.dataLock.RLock()
+	defer u.dataLock.RUnlock()
+
+	result := []config.Sensor{}
+	for _, d := range u.dataMap {
+		result = append(result, d.Info)
+	}
+
+	return result
 }
