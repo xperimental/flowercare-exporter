@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -82,29 +83,51 @@ func main() {
 		log.Fatal(http.ListenAndServe(config.ListenAddr, nil))
 	}()
 
-	runLoop(config, provider)
+	wg := &sync.WaitGroup{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	startSignalHandler(ctx, wg, cancel)
+	startUpdateLoop(ctx, wg, config, provider)
+
+	log.Info("Exporter is started.")
+	wg.Wait()
 	log.Info("Shutdown complete.")
 }
 
-func runLoop(cfg config.Config, provider *updater.Updater) {
-	ctx, cancel := context.WithCancel(context.Background())
+func startSignalHandler(ctx context.Context, wg *sync.WaitGroup, cancel func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	sigCh := make(chan os.Signal)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sigCh := make(chan os.Signal)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+		log.Debug("Signal handler ready.")
+		<-sigCh
+		log.Debug("Got shutdown signal.")
+		signal.Reset()
+		cancel()
+	}()
+}
+
+func startUpdateLoop(ctx context.Context, wg *sync.WaitGroup, cfg config.Config, provider *updater.Updater) {
+	wg.Add(1)
 
 	refresher := time.NewTicker(cfg.RefreshDuration)
 
-	go provider.Update(ctx, time.Now())
-	for {
-		select {
-		case <-sigCh:
-			log.Debug("Got shutdown signal.")
+	go func() {
+		defer wg.Done()
 
-			signal.Reset()
-			cancel()
-			return
-		case now := <-refresher.C:
-			go provider.Update(ctx, now)
+		log.Debug("Update loop ready.")
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug("Shutting down update loop")
+				return
+			case now := <-refresher.C:
+				log.Debugf("Updating all at %s", now)
+				go provider.Update(ctx, now)
+			}
 		}
-	}
+	}()
 }
