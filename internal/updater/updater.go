@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	updaterTickDuration = time.Second
+	updaterTickDuration = 10 * time.Second
 )
 
 type data struct {
@@ -146,7 +146,6 @@ func (u *Updater) getNextQueueItem(now time.Time) (queueItem, bool) {
 	defer u.queueLock.Unlock()
 
 	if len(u.queue) == 0 {
-		u.log.Debug("Queue is empty.")
 		return queueItem{}, false
 	}
 	u.log.Debugf("Queue length: %d", len(u.queue))
