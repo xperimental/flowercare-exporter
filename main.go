@@ -43,7 +43,7 @@ func main() {
 	log.SetLevel(logrus.Level(config.LogLevel))
 	log.Infof("Bluetooth Device: %s", config.Device)
 
-	provider, err := updater.New(log, config.Device)
+	provider, err := updater.New(log, config.Device, config.Retry)
 	if err != nil {
 		log.Fatalf("Error creating device: %s", err)
 	}
@@ -87,7 +87,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	startSignalHandler(ctx, wg, cancel)
-	startUpdateLoop(ctx, wg, config, provider)
+	startScheduleLoop(ctx, wg, config, provider)
+	provider.Start(ctx, wg)
 
 	log.Info("Exporter is started.")
 	wg.Wait()
@@ -110,23 +111,24 @@ func startSignalHandler(ctx context.Context, wg *sync.WaitGroup, cancel func()) 
 	}()
 }
 
-func startUpdateLoop(ctx context.Context, wg *sync.WaitGroup, cfg config.Config, provider *updater.Updater) {
+func startScheduleLoop(ctx context.Context, wg *sync.WaitGroup, cfg config.Config, provider *updater.Updater) {
 	wg.Add(1)
 
 	refresher := time.NewTicker(cfg.RefreshDuration)
+	provider.UpdateAll(time.Now())
 
 	go func() {
 		defer wg.Done()
 
-		log.Debug("Update loop ready.")
+		log.Debug("Schedule loop ready.")
 		for {
 			select {
 			case <-ctx.Done():
-				log.Debug("Shutting down update loop")
+				log.Debug("Shutting down refresh loop")
 				return
 			case now := <-refresher.C:
 				log.Debugf("Updating all at %s", now)
-				go provider.Update(ctx, now)
+				provider.UpdateAll(now)
 			}
 		}
 	}()
