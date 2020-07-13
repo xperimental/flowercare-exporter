@@ -7,11 +7,14 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+	"github.com/xperimental/flowercare-exporter/internal/collector"
 	"github.com/xperimental/flowercare-exporter/internal/config"
+	"github.com/xperimental/flowercare-exporter/internal/updater"
 )
 
 var (
@@ -40,42 +43,28 @@ func main() {
 	log.SetLevel(logrus.Level(config.LogLevel))
 	log.Infof("Bluetooth Device: %s", config.Device)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := &sync.WaitGroup{}
-
-	go func() {
-		sigCh := make(chan os.Signal)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-		<-sigCh
-		log.Debug("Got shutdown signal.")
-
-		signal.Reset()
-		cancel()
-	}()
-
-	reader, err := newQueuedDataReader(config.CooldownPeriod, config.Device)
+	provider, err := updater.New(log, config.Device, config.Retry)
 	if err != nil {
 		log.Fatalf("Error creating device: %s", err)
 	}
 
-	reader.Run(ctx, wg)
-
 	for _, s := range config.Sensors {
 		log.Infof("Sensor: %s", s)
+		provider.AddSensor(s)
+	}
 
-		reader := reader.ReadFunc(s.MacAddress)
-		collector := newCollector(reader, config.RefreshDuration, s)
-
-		if err := prometheus.Register(collector); err != nil {
-			log.Fatalf("Failed to register collector: %s", err)
-		}
-
-		collector.StartUpdate(ctx, wg)
+	c := &collector.Flowercare{
+		Log:           log,
+		Source:        provider.GetData,
+		Sensors:       config.Sensors,
+		StaleDuration: config.StaleDuration,
+	}
+	if err := prometheus.Register(c); err != nil {
+		log.Fatalf("Failed to register collector: %s", err)
 	}
 
 	versionMetric := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: metricPrefix + "build_info",
+		Name: collector.MetricPrefix + "build_info",
 		Help: "Contains build information as labels. Value set to 1.",
 		ConstLabels: prometheus.Labels{
 			"version": version,
@@ -94,7 +83,53 @@ func main() {
 		log.Fatal(http.ListenAndServe(config.ListenAddr, nil))
 	}()
 
-	log.Info("Startup complete.")
+	wg := &sync.WaitGroup{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	startSignalHandler(ctx, wg, cancel)
+	startScheduleLoop(ctx, wg, config, provider)
+	provider.Start(ctx, wg)
+
+	log.Info("Exporter is started.")
 	wg.Wait()
 	log.Info("Shutdown complete.")
+}
+
+func startSignalHandler(ctx context.Context, wg *sync.WaitGroup, cancel func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		sigCh := make(chan os.Signal)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+		log.Debug("Signal handler ready.")
+		<-sigCh
+		log.Debug("Got shutdown signal.")
+		signal.Reset()
+		cancel()
+	}()
+}
+
+func startScheduleLoop(ctx context.Context, wg *sync.WaitGroup, cfg config.Config, provider *updater.Updater) {
+	wg.Add(1)
+
+	refresher := time.NewTicker(cfg.RefreshDuration)
+	provider.UpdateAll(time.Now())
+
+	go func() {
+		defer wg.Done()
+
+		log.Debug("Schedule loop ready.")
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug("Shutting down refresh loop")
+				return
+			case now := <-refresher.C:
+				log.Debugf("Updating all at %s", now)
+				provider.UpdateAll(now)
+			}
+		}
+	}()
 }
