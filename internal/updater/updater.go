@@ -32,8 +32,9 @@ type queueItem struct {
 
 // Updater can be used to get data from a set of Miflora sensors and cache that data temporarily.
 type Updater struct {
-	log         logrus.FieldLogger
-	retryConfig config.RetryConfig
+	log            logrus.FieldLogger
+	refreshTimeout time.Duration
+	retryConfig    config.RetryConfig
 
 	deviceName string
 	device     ble.Device
@@ -46,19 +47,20 @@ type Updater struct {
 }
 
 // New creates a new Updater using the specified Bluetooth device.
-func New(log logrus.FieldLogger, deviceName string, retryConfig config.RetryConfig) (*Updater, error) {
+func New(log logrus.FieldLogger, deviceName string, refreshTimeout time.Duration, retryConfig config.RetryConfig) (*Updater, error) {
 	device, err := linux.NewDeviceWithName(deviceName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Updater{
-		log:         log,
-		retryConfig: retryConfig,
-		deviceName:  deviceName,
-		device:      device,
-		queue:       map[string]queueItem{},
-		dataMap:     map[string]*data{},
+		log:            log,
+		refreshTimeout: refreshTimeout,
+		retryConfig:    retryConfig,
+		deviceName:     deviceName,
+		device:         device,
+		queue:          map[string]queueItem{},
+		dataMap:        map[string]*data{},
 	}, nil
 }
 
@@ -186,6 +188,9 @@ func (u *Updater) updateSensor(ctx context.Context, sensor config.Sensor) error 
 		elapsed := time.Since(start)
 		u.log.Debugf("Updating %q took %s.", sensor, elapsed)
 	}(time.Now())
+
+	ctx, cancel := context.WithTimeout(ctx, u.refreshTimeout)
+	defer cancel()
 
 	u.log.Debugf("Reading data for %q on %q", sensor.MacAddress, u.deviceName)
 	data, err := miflora.ReadData(ctx, u.log, u.device, sensor.MacAddress)

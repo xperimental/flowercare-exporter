@@ -43,7 +43,7 @@ func main() {
 	log.SetLevel(logrus.Level(config.LogLevel))
 	log.Infof("Bluetooth Device: %s", config.Device)
 
-	provider, err := updater.New(log, config.Device, config.Retry)
+	provider, err := updater.New(log, config.Device, config.RefreshTimeout, config.Retry)
 	if err != nil {
 		log.Fatalf("Error creating device: %s", err)
 	}
