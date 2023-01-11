@@ -1,6 +1,6 @@
 module github.com/xperimental/flowercare-exporter
 
-go 1.17
+go 1.19
 
 require (
 	github.com/go-ble/ble v0.0.0-20210519192345-b055c211937b
